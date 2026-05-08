@@ -1,7 +1,38 @@
-# 🕳 Bengaluru Pothole Reporter — FastAPI Edition
+# 🕳️ Bengaluru Pothole Reporter
 
-A full-stack Python web app to crowdsource pothole locations across Bengaluru.
-**FastAPI** backend handles image processing; the frontend is served as a Jinja2 template.
+A full-stack civic web app to crowdsource and map pothole locations across Bengaluru. Built with **FastAPI** + **Supabase** + **Leaflet.js**.
+
+🌐 **Live Demo:** [potholes-complaint-bengaluru.onrender.com](https://potholes-complaint-bengaluru.onrender.com)
+
+---
+
+## ✨ Features
+
+- 📸 **Photo upload** with automatic GPS extraction from EXIF metadata
+- 🗺️ **Interactive Leaflet map** showing all reported potholes
+- 📍 **Draggable marker** for manual location setting when GPS is missing
+- 🔐 **Google OAuth** login via Supabase Auth
+- 🖼️ **Adaptive image compression** using Python Pillow (4-tier quality scaling)
+- 🗑️ **Delete your own reports** — enforced via Supabase RLS
+- 🌙 **Dark / Light map toggle** (OpenStreetMap ↔ CartoDB Dark)
+- 📊 **Live report stats** — total count and today's reports
+- 🔒 **Row Level Security** — users can only delete their own data
+- 📱 **Mobile-first responsive UI**
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Backend | FastAPI + Uvicorn |
+| Frontend | HTML + Tailwind CSS + Vanilla JS |
+| Map | Leaflet.js + OpenStreetMap |
+| Database | Supabase (PostgreSQL) |
+| Storage | Supabase Storage |
+| Auth | Supabase Auth + Google OAuth |
+| Image processing | Pillow + piexif |
+| Deployment | Render.com |
 
 ---
 
@@ -9,68 +40,71 @@ A full-stack Python web app to crowdsource pothole locations across Bengaluru.
 
 ```
 pothole-reporter/
-├── main.py               ← FastAPI app (all routes + logic)
+├── main.py                 ← FastAPI app (all routes + Python logic)
 ├── templates/
-│   └── index.html        ← Jinja2 HTML template (map + UI)
+│   └── index.html          ← Frontend (map, UI, Supabase JS client)
 ├── static/
-│   └── uploads/          ← Local temp dir (not used in prod)
+│   └── uploads/            ← Temp directory (not used in production)
 ├── requirements.txt
-├── .env.example
+├── .env                    ← Your credentials (never commit this)
+├── .env.example            ← Template for environment variables
+├── .gitignore
 └── README.md
 ```
 
 ---
 
-## 🐍 What Python Does
+## 🚀 Local Development
 
-| Task | Library |
-|---|---|
-| Web server & API routes | FastAPI + Uvicorn |
-| EXIF GPS extraction | piexif + Pillow |
-| Adaptive image compression | Pillow (PIL) |
-| Supabase Storage upload | supabase-py |
-| Database read/write | supabase-py |
-| HTML template rendering | Jinja2 |
-| Env config | python-dotenv |
-
----
-
-## 🚀 Setup & Run
-
-### 1. Clone & install
+### 1. Clone the repo
 ```bash
-git clone <your-repo>
+git clone https://github.com/YOUR_USERNAME/pothole-reporter.git
 cd pothole-reporter
+```
 
+### 2. Create and activate virtual environment
+```bash
 python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
+
+# macOS/Linux
+source venv/bin/activate
+
+# Windows
+venv\Scripts\activate
+```
+
+### 3. Install dependencies
+```bash
 pip install -r requirements.txt
 ```
 
-### 2. Configure environment
+### 4. Set up environment variables
 ```bash
 cp .env.example .env
-# Edit .env with your Supabase credentials
 ```
 
-### 3. Run
+Edit `.env` with your Supabase credentials:
+```
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_KEY=your-service-role-key
+```
+
+### 5. Run the server
 ```bash
 uvicorn main:app --reload
-# Open http://localhost:8000
 ```
+
+Open [http://localhost:8000](http://localhost:8000)
+
+> **API Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ---
 
-## 🔑 Supabase Setup
+## 🗃️ Supabase Setup
 
-1. Create project at [supabase.com](https://supabase.com)
-2. Enable **Google Auth**:
-   - Google Cloud Console → OAuth 2.0 Client
-   - Add credentials to Supabase → Authentication → Providers
-3. Run this SQL in Supabase SQL editor:
-
+### Database Table
 ```sql
--- Table
 create table reports (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz default now(),
@@ -80,46 +114,80 @@ create table reports (
   latitude double precision not null,
   longitude double precision not null
 );
-
--- RLS
-alter table reports enable row level security;
-
-create policy "Public read" on reports for select using (true);
-create policy "Auth insert" on reports for insert with check (auth.uid() = user_id);
-create policy "Owner delete" on reports for delete using (auth.uid() = user_id);
 ```
 
-4. Create storage bucket: `pothole-images`
+### Row Level Security
+```sql
+alter table reports enable row level security;
+
+create policy "Public read"
+  on reports for select using (true);
+
+create policy "Auth insert"
+  on reports for insert
+  with check (auth.uid() = user_id);
+
+create policy "Owner delete"
+  on reports for delete
+  using (auth.uid() = user_id);
+```
+
+### Storage Bucket
+Create a bucket named `pothole-images` with these policies:
 
 ```sql
+-- Public read
 create policy "Public read images"
-  on storage.objects for select using (bucket_id = 'pothole-images');
+  on storage.objects for select
+  using (bucket_id = 'pothole-images');
 
+-- Authenticated upload
 create policy "Auth upload"
   on storage.objects for insert
   with check (auth.role() = 'authenticated');
 
+-- Owner delete
 create policy "Owner delete images"
   on storage.objects for delete
-  using (auth.uid()::text = owner);
+  using (auth.uid() = owner::uuid);
 ```
+
+---
+
+## 🔑 Google OAuth Setup
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com) → Create a new project
+2. APIs & Services → OAuth consent screen → External → fill in app name
+3. APIs & Services → Credentials → Create OAuth Client ID → Web application
+4. Add to **Authorized JavaScript origins:**
+   ```
+   http://localhost:8000
+   https://your-app.onrender.com
+   ```
+5. Add to **Authorized redirect URIs:**
+   ```
+   https://your-project.supabase.co/auth/v1/callback
+   ```
+6. Copy **Client ID** and **Client Secret** → paste into Supabase → Authentication → Providers → Google
 
 ---
 
 ## 🌐 API Endpoints
 
-| Method | Path | Description |
+| Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/` | Serves the HTML app |
-| `GET` | `/api/reports` | Fetch all reports |
-| `POST` | `/api/reports` | Submit new report (image + coords) |
+| `GET` | `/api/reports` | Fetch all pothole reports |
+| `POST` | `/api/reports` | Submit a new report |
 | `DELETE` | `/api/reports/{id}` | Delete own report |
 | `POST` | `/api/extract-gps` | Extract GPS from image (no save) |
 | `GET` | `/health` | Health check |
 
 ---
 
-## 🖼 Adaptive Compression Logic (Python/Pillow)
+## 🖼️ Adaptive Image Compression
+
+Python Pillow compresses images server-side before uploading to Supabase Storage:
 
 | File size | Quality | Max dimension |
 |---|---|---|
@@ -130,17 +198,43 @@ create policy "Owner delete images"
 
 ---
 
-## 🚀 Deploy
+## ☁️ Deployment (Render)
 
-### Render (recommended for FastAPI)
-1. Push to GitHub
-2. New Web Service → Python → `uvicorn main:app --host 0.0.0.0 --port $PORT`
-3. Add env vars from `.env`
+1. Push code to GitHub
+2. Go to [render.com](https://render.com) → New → Web Service → connect repo
+3. Configure:
+   - **Build Command:** `pip install -r requirements.txt`
+   - **Start Command:** `uvicorn main:app --host 0.0.0.0 --port $PORT`
+   - **Instance Type:** Free
+4. Add environment variables (SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_KEY)
+5. Click **Create Web Service**
+6. Update Supabase → Auth → URL Configuration with your Render URL
 
-### Railway / Fly.io
-Same approach — set env vars, deploy via GitHub.
+---
 
-### Add a `Procfile` for Render:
-```
-web: uvicorn main:app --host 0.0.0.0 --port $PORT
-```
+## 🔮 Future Improvements
+
+- [ ] Severity tagging (low / medium / high)
+- [ ] Upvotes and validation by other users
+- [ ] Heatmap visualization
+- [ ] Offline upload queue (PWA)
+- [ ] Admin dashboard for BBMP authorities
+- [ ] Email notifications when a report is resolved
+
+---
+
+## ⚠️ Privacy
+
+- Your photo's GPS location is **publicly visible** on the map
+- Avoid uploading photos with **faces** or **license plates**
+- EXIF location data is extracted server-side and stored in the database
+
+---
+
+## 📄 License
+
+MIT License — free to use, modify, and distribute.
+
+---
+
+Made with ❤️ for Bengaluru 🇮🇳
