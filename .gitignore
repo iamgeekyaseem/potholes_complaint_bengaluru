@@ -1,0 +1,11 @@
+.env
+.env.example
+.vscode/
+__pycache__/
+
+venv/
+.env
+__pycache__/
+static/uploads/
+*.pyc
+.DS_Store
